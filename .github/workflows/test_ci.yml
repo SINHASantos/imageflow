@@ -16,49 +16,50 @@ jobs:
       matrix:
         # setup different OS and targets
         include:
-          - name: ubuntu_18_04-x86_64
-            os: ubuntu-18.04
+          - name: ubuntu_20_04-x86_64
+            os: ubuntu-20.04
             TARGET_CPU: x86-64
 
           - name: ubuntu_22_04-x86_64
             os: ubuntu-22.04
             TARGET_CPU: x86-64
 
-          # - name: osx_11_0-x86_64
-          #   os: macos-11.0
-          #   TARGET_CPU: x86-64
-
-          - name: osx_10_11-x86_64
-            os: macos-10.15
+          - name: osx_11-x86_64
+            os: macos-11
             TARGET_CPU: nehalem
 
           - name: win-x86_64
             os: windows-2019
             TARGET_CPU: x86-64
 
-          - name: ubuntu_18_04-x86_64-haswell
-            os: ubuntu-18.04
+          - name: ubuntu_20_04-x86_64-haswell
+            os: ubuntu-20.04
             TARGET_CPU: haswell
 
           - name: win-x86_64-haswell
             os: windows-2019
             TARGET_CPU: haswell
 
+          - name: osx_14-aarch64
+            os: macos-14
+            TARGET_CPU: apple-m1
+
+          - name: ubuntu_24-arm64
+            os: ubuntu-24-arm-32gb
+            TARGET_CPU: generic
+
     runs-on: ${{matrix.os}}
     steps:
+
+      - run: rustup show
       - name: Checkout code
-        uses: actions/checkout@master
-      ### BUILD CACHE ###
-      # NB: We install gnu-tar because BSD tar is buggy on GitHub's macos machines. https://github.com/actions/cache/issues/403
-      - name: Install GNU tar (Macos)
-        if: ${{contains( matrix.os, 'macos' )}}
-        run: |
-          brew install gnu-tar
-          echo PATH="/usr/local/opt/gnu-tar/libexec/gnubin:$PATH" >> $GITHUB_ENV
+        uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@stable
 
       ### Cargo Cache for Build Artifacts ###
       - name: Cache cargo
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/registry
@@ -66,35 +67,8 @@ jobs:
             target
           key: ${{ runner.os }}-${{matrix.name}}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      ### Install Nasm for MacOS ###
-      - name: Install nasm
-        run: brew install nasm
-        if: ${{contains( matrix.os, 'macos' )}}
-
-      ### Install Nasm for Windows ###
-      - name: Install nasm
-        run: choco install nasm
-        if: ${{contains( matrix.os, 'windows' )}}
-
-      ### Fallback in case Nasm install fails ###
-      - name: Install nasm
-        run: |
-          curl -L -o nasminst.exe https://imageflow-resources.s3-us-west-2.amazonaws.com/tools/nasm-2.15.05-installer-x64.exe
-          .\nasminst.exe /S
-        if: ${{contains( matrix.os, 'windows' ) && failure()}}
-
-      ### Set Path for nasm install ###
-      - name: Set Path
-        run: |
-          echo "C:\Program Files\NASM" >> $GITHUB_PATH
-          echo "C:\Program Files (x86)\NASM" >> $GITHUB_PATH
-        if: ${{contains( matrix.os, 'windows' )}}
-        shell: bash
-
-      ### Install Nasm for Ubuntu ###
-      - name: Install nasm
-        run: sudo apt install nasm
-        if: ${{contains( matrix.os, 'ubuntu' )}}
+      - name: Install NASM
+        uses: ./.github/actions/install-nasm
 
       ### Check Build ###
       - name: Check Build
@@ -116,27 +90,17 @@ jobs:
   test_win32:
     runs-on: windows-2019
     steps:
+      - run: rustup show
       - name: Checkout code
-        uses: actions/checkout@master
+        uses: actions/checkout@v3
 
       ### Install Nasm with fallback to S3 ###
       - name: Install nasm
-        run: choco install nasm
-      - name: Install nasm
-        run: |
-          curl -L -o nasminst.exe https://imageflow-resources.s3-us-west-2.amazonaws.com/tools/nasm-2.15.05-installer-x86.exe
-          .\nasminst.exe /S
-        if: ${{failure()}}
-
-      - name: Set Path
-        run: |
-          echo "C:\Program Files\NASM" >> $GITHUB_PATH
-          echo "C:\Program Files (x86)\NASM" >> $GITHUB_PATH
-        shell: bash
+        uses: ./.github/actions/install-nasm
 
       ### Cargo cache for Build artifacts ###
       - name: Cache cargo
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/registry
@@ -144,11 +108,9 @@ jobs:
             target
           key: ${{ runner.os }}-windows-test-32-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install latest 32bit target
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          override: true
-          components: rustfmt, clippy
+          #components: rustfmt, clippy
           target: i686-pc-windows-msvc
 
       ### check and test build ###
@@ -156,3 +118,4 @@ jobs:
         run: cargo check --all --target=i686-pc-windows-msvc
       - name: Test Build
         run: cargo test --all --release --target=i686-pc-windows-msvc
+

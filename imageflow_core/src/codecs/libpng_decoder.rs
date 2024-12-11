@@ -151,14 +151,33 @@ impl PngDec{
 
         let buffer_slice = unsafe{ std::slice::from_raw_parts_mut(buffer, bytes_requested) };
 
-        return match decoder.io.read_exact(buffer_slice) {
-            Ok(()) => {
-                *out_bytes_read = buffer_slice.len();
+        return match decoder.io.read_maximally(buffer_slice) {
+            Ok(read_total) => {
+                assert!(read_total <= bytes_requested);
+                *out_bytes_read = read_total;
                 true
             },
             Err(err) => {
-                decoder.error = Some(FlowError::from_decoder(err).at(here!()));
-                false
+                if err.kind() == ::std::io::ErrorKind::UnexpectedEof {
+                    let len = decoder.io.try_get_length();
+                    let pos = decoder.io.try_get_position();
+                    let remaining = if len.is_some() && pos.is_some() {
+                        Some(len.unwrap() as i64 - pos.unwrap() as i64)
+                    } else {
+                        None
+                    };
+                    let missing = remaining.map(|r| (bytes_requested as i64) - (r as i64));
+                    let err =
+                    FlowError::without_location(ErrorKind::DecodingIoError,
+                        format!("{:?} (failed to read requested {} bytes (only {:?} remain), pos={:?}, len={:?}, missing={:?})", err, bytes_requested, remaining, pos, len, missing)).at(here!());
+
+                    decoder.error = Some(err);
+
+                    false
+                } else {
+                    decoder.error = Some(FlowError::from_decoder(err).at(here!()));
+                    false
+                }
             }
         }
 

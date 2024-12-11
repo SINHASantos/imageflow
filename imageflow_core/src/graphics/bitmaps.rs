@@ -33,12 +33,19 @@ impl BitmapsContainer{
     }
 
     pub fn try_borrow_mut(&self, key: BitmapKey) -> Result<RefMut<Bitmap>, FlowError> {
-        self.get(key).ok_or_else(|| nerror!(ErrorKind::BitmapKeyNotFound))?
+        let lookup = self.get(key);
+        if lookup.is_none(){
+            // collect all the slotmap keys
+            let keys = self.map.keys().map(|key| format!("{:?}",key)).collect::<Vec<String>>().join(",");
+            return  Err(nerror!(ErrorKind::BitmapKeyNotFound, "Could not find key {:?} in slotmap {:p} of length {:?} and keys {:?}", key, &self.map, self.map.len(), keys));
+        }
+        lookup.unwrap()
             .try_borrow_mut()
             .map_err(|e| nerror!(ErrorKind::FailedBorrow))
     }
 
     pub fn free(&mut self, key: BitmapKey) -> bool {
+        // eprintln!("Freeing {:?} from slotmap {:p}", key, &self.map);
         self.map.remove(key).is_some()
     }
 
@@ -49,7 +56,9 @@ impl BitmapsContainer{
                             alpha_premultiplied: bool,
                             alpha_meaningful: bool,
                             color_space: ColorSpace) -> Result<BitmapKey, FlowError>{
-        Ok(self.map.insert(RefCell::new(Bitmap::create_float(w,h,pixel_layout, alpha_premultiplied, alpha_meaningful, color_space)?)))
+        let key = self.map.insert(RefCell::new(Bitmap::create_float(w,h,pixel_layout, alpha_premultiplied, alpha_meaningful, color_space)?));
+        // eprintln!("Creating bitmap {:?} in slotmap {:p}", key, &self.map);
+        Ok(key)
     }
 
     pub fn create_bitmap_u8(&mut self,
@@ -60,7 +69,9 @@ impl BitmapsContainer{
                              alpha_meaningful: bool,
                              color_space: ColorSpace,
                              compose: BitmapCompositing) -> Result<BitmapKey, FlowError>{
-        Ok(self.map.insert(RefCell::new(Bitmap::create_u8(w,h,pixel_layout, alpha_premultiplied, alpha_meaningful, color_space, compose)?)))
+        let key = self.map.insert(RefCell::new(Bitmap::create_u8(w,h,pixel_layout, alpha_premultiplied, alpha_meaningful, color_space, compose)?));
+        // eprintln!("Creating bitmap {:?} in slotmap {:p}", key, &self.map);
+        Ok(key)
     }
 }
 
@@ -77,9 +88,12 @@ fn crop_bitmap(){
     let mut bitmap = c.get(b1).unwrap().borrow_mut();
     let mut full_window = bitmap.get_window_f32().unwrap();
     let mut window = full_window.window(1,1,6,6).unwrap();
-    window.slice()[0] = 3f32;
+    window.slice_mut()[0] = 3f32;
 
     bitmap.set_alpha_meaningful(false);
+
+    let _ = c.get(b1).unwrap();
+    let _ = c.get(b2).unwrap();
 
 }
 
@@ -192,6 +206,12 @@ impl<'a,T>  BitmapWindowMut<'a, T> {
             return Err(nerror!(ErrorKind::InvalidState));
         }
 
+        // zero width and zero height are invalid
+        if self.w() == 0 || self.h() == 0 {
+            return Err(nerror!(ErrorKind::InvalidArgument, "Bitmap dimensions cannot be zero"));
+        }
+
+
         let fmt = self.info().calculate_pixel_format()
             .map_err(|e| e.at(here!()))?;
 
@@ -248,11 +268,11 @@ impl<'a,T>  BitmapWindowMut<'a, T> {
     /// Replaces all data with zeroes. Will zero data outside the window if this is a cropped window.
     pub fn clear_slice(&mut self){
         unsafe {
-            std::ptr::write_bytes(self.slice.as_mut_ptr(), 0, self.slice.len() - 1);
+            std::ptr::write_bytes(self.slice.as_mut_ptr(), 0, self.slice.len());
         }
     }
 
-    pub fn row(&mut self, index: u32) -> Option<&mut [T]>{
+    pub fn row_mut(&mut self, index: u32) -> Option<&mut [T]>{
         if index >= self.info.h {
             None
         }else {
@@ -262,17 +282,41 @@ impl<'a,T>  BitmapWindowMut<'a, T> {
         }
     }
 
+    pub fn row(&self, index: u32) -> Option<&[T]>{
+        if index >= self.info.h {
+            None
+        }else {
+            let start_index = self.info.item_stride.checked_mul(index).unwrap() as usize;
+            let end_index = start_index + self.info.w as usize * self.info.channels();
+            Some(&self.slice[start_index..end_index])
+        }
+    }
+
+
+
     pub fn row_window(&mut self, index: u32) -> Option<BitmapWindowMut<T>>{
         let w= self.w();
         self.window(0, index, w, index + 1)
     }
 
 
-    pub fn slice(&'a mut self) -> &'a mut [T]{
+    pub fn underlying_slice_mut(&mut self) -> &mut [T]{
         self.slice
     }
 
-
+    pub fn slice_mut(&mut self) -> &mut [T]{
+        //Exclude padding/alignment/stride after last pixel
+        let last_pixel_offset = self.info.item_stride() * (self.info.h -1) + self.info.w * self.info.channels() as u32;
+        self.slice[0..last_pixel_offset as usize].as_mut()
+    }
+    pub fn get_slice(&self) -> &[T]{
+        //Exclude padding/alignment/stride after last pixel
+        let last_pixel_offset = self.info.item_stride() * (self.info.h -1) + self.info.w * self.info.channels() as u32;
+        self.slice[0..last_pixel_offset as usize].as_ref()
+    }
+    pub fn underlying_slice(&self) -> &[T]{
+        self.slice
+    }
     pub(crate) fn slice_ptr(&mut self) -> *mut T {
         self.slice.as_mut_ptr()
     }
@@ -284,7 +328,7 @@ impl<'a,T>  BitmapWindowMut<'a, T> {
         if x1 >= x2 || y1 >= y2 || x2 > self.info.width() || y2 > self.info.height(){
             return None;// Err(nerror!(ErrorKind::InvalidArgument, "x1,y1,x2,y2 must be within window bounds"));
         }
-        let offset = x1 + (y1 * self.info.item_stride());
+        let offset = (x1 * self.info.channels() as u32) + (y1 * self.info.item_stride());
         Some(BitmapWindowMut{
             slice: &mut self.slice[offset as usize..],
             info: BitmapInfo {
@@ -368,6 +412,7 @@ impl Bitmap{
 pub struct BitmapInfo{
     w: u32,
     h: u32,
+    /// Row stride
     item_stride: u32,
     alpha_premultiplied: bool,
     alpha_meaningful: bool,

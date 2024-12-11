@@ -15,7 +15,7 @@ jobs:
         include:
 
           - name: ubuntu-x86_64
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             TARGET_CPU: x86-64
             FETCH_COMMIT_SUFFIX: linux64
             NUGET_RUNTIME: linux-x64
@@ -26,22 +26,14 @@ jobs:
             FETCH_COMMIT_SUFFIX: win-x86_64
             NUGET_RUNTIME: win-x64
 
-
-### 20.04 is blocked from nuget upload later in code
-          - name: ubuntu_20_04-x86_64
-            os: ubuntu-20.04
-            TARGET_CPU: x86-64
-            FETCH_COMMIT_SUFFIX: linux64_glibc231
-            NUGET_RUNTIME: ubuntu.20.04-x64
-
           - name: osx-x86_64
-            os: macos-10.15
+            os: macos-11
             TARGET_CPU: nehalem
             FETCH_COMMIT_SUFFIX: mac64
             NUGET_RUNTIME: osx-x64
 
           - name: ubuntu-x86_64-haswell
-            os: ubuntu-18.04
+            os: ubuntu-20.04
             TARGET_CPU: haswell
             FETCH_COMMIT_SUFFIX: linux64_haswell_glibc227
             NUGET_RUNTIME: ubuntu-x64
@@ -54,20 +46,18 @@ jobs:
 
     runs-on: ${{matrix.os}}
     steps:
+      - run: rustup show
+
+      - run: rustup update stable
+        if: ${{contains( matrix.os, 'macos' )}}
+
+
       - name: Checkout code
-        uses: actions/checkout@master
+        uses: actions/checkout@v3
       - uses: FranzDiebold/github-env-vars-action@v1.3.0
 
-      ### BUILD CACHE ###
-      # NB: We install gnu-tar because BSD tar is buggy on GitHub's macos machines. https://github.com/actions/cache/issues/403
-      - name: Install GNU tar (Macos)
-        if: ${{contains( matrix.os, 'macos' )}}
-        run: |
-          brew install gnu-tar
-          echo PATH="/usr/local/opt/gnu-tar/libexec/gnubin:$PATH" >> $GITHUB_ENV
-
       - name: Cache cargo
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/registry
@@ -192,13 +182,13 @@ jobs:
       - name: Add Artifacts URL (POSIX)
         run: echo ESTIMATED_ARTIFACT_URL=$ARTIFACT_PATH.tar.gz >> $GITHUB_ENV
         env:
-          ARTIFACT_PATH: https://s3-us-west-1.amazonaws.com/imageflow-nightlies/imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}
+          ARTIFACT_PATH: https://s3-us-west-1.amazonaws.com/imageflow-nightlies/imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}
         if: ${{!contains( matrix.os, 'windows' )}}
 
       - name: Add Artifacts URL (Windows)
         run: echo ESTIMATED_ARTIFACT_URL=$ARTIFACT_PATH.zip >> $GITHUB_ENV
         env:
-          ARTIFACT_PATH: https://s3-us-west-1.amazonaws.com/imageflow-nightlies/imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}
+          ARTIFACT_PATH: https://s3-us-west-1.amazonaws.com/imageflow-nightlies/imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}
         if: ${{contains( matrix.os, 'windows' )}}
         shell: bash
 
@@ -209,13 +199,13 @@ jobs:
         env:
           ESTIMATED_DOCS_URL: https://s3-us-west-1.amazonaws.com/imageflow-nightlies/doc
           CI_SEQUENTIAL_BUILD_NUMBER: ${{github.run_number}}
-          CI_BUILD_URL: https://github.com/${{env.GITHUB_REPOSITORY_OWNER}}/${{env.GITHUB_REPOSITORY_NAME}}/actions/runs/${{github.run_id}}
-          CI_JOB_URL: https://github.com/${{env.GITHUB_REPOSITORY_OWNER}}/${{env.GITHUB_REPOSITORY_NAME}}/actions/runs/${{github.run_id}}
+          CI_BUILD_URL: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}
+          CI_JOB_URL: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}
           CI_JOB_TITLE: GitHub ${{github.job_id}} ${{matrix.name}}
           CI_STRING: GitHub actions
           CI_PULL_REQUEST_INFO: ${{github.event_name!='release'}}
-          CI_TAG: ${{env.GITHUB_REF_NAME}}
-          CI_REPO: ${{env.GITHUB_REPOSITORY_OWNER}}/${{env.GITHUB_REPOSITORY_NAME}}
+          CI_TAG: ${{github.ref_name}}
+          CI_REPO: ${{github.repository}}
           CI: True
           OPT_LEVEL: 0
           DEBUG: False
@@ -259,7 +249,7 @@ jobs:
           cp "${ARTIFACT_ARCHIVE_NAME}" "./artifacts/upload/commits/${GIT_COMMIT}/${ARTIFACT_UPLOAD_PATH_1}.tar.gz"
         env:
           TARGET_DIR: target/
-          ARTIFACT_UPLOAD_PATH: /imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}
+          ARTIFACT_UPLOAD_PATH: /imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}
           ARTIFACT_ARCHIVE_NAME: ./artifacts/staging/archive.tar.gz
           DOCS_UPLOAD_DIR: doc
           GIT_COMMIT: ${{github.sha}}
@@ -312,7 +302,7 @@ jobs:
           cp "${ARTIFACT_ARCHIVE_NAME}" "./artifacts/upload/commits/${GIT_COMMIT}/${ARTIFACT_UPLOAD_PATH_1}.zip"
         env:
           TARGET_DIR: target/
-          ARTIFACT_UPLOAD_PATH: /imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}
+          ARTIFACT_UPLOAD_PATH: /imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}
           ARTIFACT_ARCHIVE_NAME: ./artifacts/staging/archive.zip
           DOCS_UPLOAD_DIR: doc
           GIT_COMMIT: ${{github.sha}}
@@ -323,7 +313,7 @@ jobs:
         shell: bash
         run: ./ci/pack_nuget/pack.sh tool
         env:
-          CI_TAG: ${{env.GITHUB_REF_NAME}}
+          CI_TAG: ${{github.ref_name}}
           PACKAGE_SUFFIX: ${{matrix.name}}
           NUGET_RUNTIME: ${{matrix.NUGET_RUNTIME}}
           REPO_NAME_TOOL: ${{env.GITHUB_REPOSITORY_OWNER}}\/${{env.GITHUB_REPOSITORY_NAME}}
@@ -334,7 +324,7 @@ jobs:
         shell: bash
         run: ./ci/pack_nuget/pack.sh
         env:
-          CI_TAG: ${{env.GITHUB_REF_NAME}}
+          CI_TAG: ${{github.ref_name}}
           PACKAGE_SUFFIX: ${{matrix.name}}
           NUGET_RUNTIME: ${{matrix.NUGET_RUNTIME}}
           REPO_NAME_TOOL: ${{env.GITHUB_REPOSITORY_OWNER}}\/${{env.GITHUB_REPOSITORY_NAME}}
@@ -345,8 +335,8 @@ jobs:
         uses: Shopify/upload-to-release@master
         if: ${{!contains( matrix.os, 'windows' )}}
         with:
-          name: imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}.tar.gz
-          path: ./artifacts/github/imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}.tar.gz
+          name: imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}.tar.gz
+          path: ./artifacts/github/imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}.tar.gz
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           content-type: application/gzip
 
@@ -355,8 +345,8 @@ jobs:
         uses: Shopify/upload-to-release@master
         if: ${{contains( matrix.os, 'windows' )}}
         with:
-          name: imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}.zip
-          path: ./artifacts/github/imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}.zip
+          name: imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}.zip
+          path: ./artifacts/github/imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-${{matrix.name}}.zip
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           content-type: application/zip
 
@@ -384,10 +374,10 @@ jobs:
         run: |
           for f in ./artifacts/nuget/*.nupkg
           do
-            curl -vX PUT -u "${{env.GITHUB_REPOSITORY_OWNER}}:${{ secrets.GITHUB_TOKEN }}" -F package=@$f https://nuget.pkg.github.com/${{env.GITHUB_REPOSITORY_OWNER}}/
+            curl -vX PUT -u "${{github.repository_owner}}:${{ secrets.GITHUB_TOKEN }}" -F package=@$f https://nuget.pkg.github.com/${{github.repository_owner}}/
           done
         shell: bash
-        if: ${{'ubuntu.20.04-x64'!=matrix.NUGET_RUNTIME && env.NUGET_UPLOAD_GITHUB == 'true' }}
+        if: ${{env.NUGET_UPLOAD_GITHUB == 'true' }}
       - name: Publish nuget(Nuget)
         run: |
           for f in ./artifacts/nuget/*.nupkg
@@ -395,7 +385,7 @@ jobs:
              curl -L "https://www.nuget.org/api/v2/package" -H "X-NuGet-ApiKey: ${{ secrets.NUGET_API_KEY }}" -H "X-NuGet-Client-Version: 4.1.0" -A "NuGet Command Line/3.4.4.1321 (Unix 4.4.0.92)" --upload-file "$f" --fail
           done
         shell: bash
-        if: ${{'ubuntu.20.04-x64'!=matrix.NUGET_RUNTIME && env.NUGET_UPLOAD_NUGET == 'true'}}
+        if: ${{env.NUGET_UPLOAD_NUGET == 'true'}}
 
   build_win32:
     env:
@@ -405,7 +395,7 @@ jobs:
     runs-on: windows-2019
     steps:
       - name: Checkout code
-        uses: actions/checkout@master
+        uses: actions/checkout@v3
       - uses: FranzDiebold/github-env-vars-action@v1.3.0
       - name: Install nasm
         run: choco install nasm
@@ -422,7 +412,7 @@ jobs:
         shell: bash
 
       - name: Cache cargo
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/registry
@@ -442,16 +432,16 @@ jobs:
         run: cargo build --all --release --target=i686-pc-windows-msvc
         shell: bash
         env:
-          ESTIMATED_ARTIFACT_URL: https://s3-us-west-1.amazonaws.com/imageflow-nightlies/imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-${{env.PACKAGE_SUFFIX}}.zip
+          ESTIMATED_ARTIFACT_URL: https://s3-us-west-1.amazonaws.com/imageflow-nightlies/imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-${{env.PACKAGE_SUFFIX}}.zip
           ESTIMATED_DOCS_URL: https://s3-us-west-1.amazonaws.com/imageflow-nightlies/doc
           CI_SEQUENTIAL_BUILD_NUMBER: ${{github.run_number}}
-          CI_BUILD_URL: https://github.com/${{env.GITHUB_REPOSITORY_OWNER}}/${{env.GITHUB_REPOSITORY_NAME}}/actions/runs/${{github.run_id}}
-          CI_JOB_URL: https://github.com/${{env.GITHUB_REPOSITORY_OWNER}}/${{env.GITHUB_REPOSITORY_NAME}}/actions/runs/${{github.run_id}}
-          CI_JOB_TITLE: GitHub ${{github.job_id}}
+          CI_BUILD_URL: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}
+          CI_JOB_URL: https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}
+          CI_JOB_TITLE: GitHub ${{ github.job_id }}
           CI_STRING: GitHub actions
           CI_PULL_REQUEST_INFO: ${{github.event_name!='release'}}
-          CI_TAG: ${{env.GITHUB_REF_NAME}}
-          CI_REPO: ${{env.GITHUB_REPOSITORY_OWNER}}/${{env.GITHUB_REPOSITORY_NAME}}
+          CI_TAG: ${{github.ref_name}}
+          CI_REPO: ${{ github.repository }}
           CI: True
           OPT_LEVEL: 0
           DEBUG: False
@@ -492,7 +482,7 @@ jobs:
           cp "${ARTIFACT_ARCHIVE_NAME}" "./artifacts/upload/commits/${GIT_COMMIT}/${ARTIFACT_UPLOAD_PATH_1}.zip"
         env:
           TARGET_DIR: target/i686-pc-windows-msvc/
-          ARTIFACT_UPLOAD_PATH: /imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-win-x86
+          ARTIFACT_UPLOAD_PATH: /imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-win-x86
           ARTIFACT_ARCHIVE_NAME: ./artifacts/staging/archive.zip
           DOCS_UPLOAD_DIR: doc
           GIT_COMMIT: ${{github.sha}}
@@ -502,7 +492,7 @@ jobs:
         shell: bash
         run: ./ci/pack_nuget/pack.sh tool
         env:
-          CI_TAG: ${{env.GITHUB_REF_NAME}}
+          CI_TAG: ${{github.ref_name}}
           PACKAGE_SUFFIX: win-x86
           NUGET_RUNTIME: win-x86
           TARGET_DIR: target/i686-pc-windows-msvc
@@ -513,7 +503,7 @@ jobs:
         shell: bash
         run: ./ci/pack_nuget/pack.sh
         env:
-          CI_TAG: ${{env.GITHUB_REF_NAME}}
+          CI_TAG: ${{github.ref_name}}
           PACKAGE_SUFFIX: win-x86
           NUGET_RUNTIME: win-x86
           TARGET_DIR: target/i686-pc-windows-msvc
@@ -523,8 +513,8 @@ jobs:
       - name: Upload to release
         uses: Shopify/upload-to-release@master
         with:
-          name: imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-win-x86.zip
-          path: ./artifacts/github/imageflow-${{env.GITHUB_REF_NAME}}-${{env.GITHUB_SHA_SHORT}}-win-x86.zip
+          name: imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-win-x86.zip
+          path: ./artifacts/github/imageflow-${{github.ref_name}}-${{env.GITHUB_SHA_SHORT}}-win-x86.zip
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           content-type: text/plain
 
@@ -551,7 +541,7 @@ jobs:
         run: |
           for f in ./artifacts/nuget/*.nupkg
           do
-            curl -vX PUT -u "${{env.GITHUB_REPOSITORY_OWNER}}:${{ secrets.GITHUB_TOKEN }}" -F package=@$f https://nuget.pkg.github.com/${{env.GITHUB_REPOSITORY_OWNER}}/
+            curl -vX PUT -u "${{github.repository_owner}}:${{ secrets.GITHUB_TOKEN }}" -F package=@$f https://nuget.pkg.github.com/${{github.repository_owner}}/
           done
         shell: bash
         if: ${{env.NUGET_UPLOAD_GITHUB == 'true'}}
@@ -569,7 +559,7 @@ jobs:
     needs: [build, build_win32]
     steps:
       - name: Checkout code
-        uses: actions/checkout@master
+        uses: actions/checkout@v3
       - uses: FranzDiebold/github-env-vars-action@v1.3.0
       - name: Publish To Docker
         run: |
@@ -579,5 +569,5 @@ jobs:
           PUBLISH_DOCKER: True
           DOCKER_USERNAME: ${{secrets.DOCKER_USERNAME}}
           DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
-          PUBLISH_DOCKER_TAG: ${{env.GITHUB_REF_NAME}}
+          PUBLISH_DOCKER_TAG: ${{github.ref_name}}
           IMAGEFLOW_DOWNLOAD_URL_TAR_GZ: https://s3-us-west-1.amazonaws.com/imageflow-nightlies/commits/${{github.sha}}/linux64.tar.gz
