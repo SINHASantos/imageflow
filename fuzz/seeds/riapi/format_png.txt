@@ -1,0 +1,1 @@
+format=png&png.quality=80&png.min_quality=50

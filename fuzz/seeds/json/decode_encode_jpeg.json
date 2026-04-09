@@ -1,0 +1,1 @@
+{"framewise":{"steps":[{"decode":{"io_id":0}},{"encode":{"io_id":1,"preset":{"mozjpeg":{"quality":80,"progressive":false,"matte":null}}}}]}}

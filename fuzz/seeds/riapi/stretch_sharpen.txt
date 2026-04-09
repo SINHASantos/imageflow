@@ -1,0 +1,1 @@
+w=1024&h=768&mode=stretch&f.sharpen=50

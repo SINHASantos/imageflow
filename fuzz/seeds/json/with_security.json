@@ -1,0 +1,1 @@
+{"framewise":{"steps":[{"decode":{"io_id":0}},{"encode":{"io_id":1,"preset":{"libpng":{"depth":null,"matte":null,"zlib_compression":null}}}}]},"security":{"max_decode_size":{"w":1024,"h":1024,"megapixels":1.0},"max_frame_size":{"w":1024,"h":1024,"megapixels":1.0},"max_encode_size":{"w":1024,"h":1024,"megapixels":1.0}}}

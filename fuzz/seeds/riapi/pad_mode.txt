@@ -1,0 +1,1 @@
+w=200&h=200&mode=pad&bgcolor=ffffff

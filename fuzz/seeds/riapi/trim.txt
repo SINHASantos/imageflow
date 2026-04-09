@@ -1,0 +1,1 @@
+trim.threshold=80&trim.percentpadding=1

@@ -1,0 +1,1 @@
+w=400&mode=max&format=webp&quality=80

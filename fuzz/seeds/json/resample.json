@@ -1,0 +1,1 @@
+{"framewise":{"steps":[{"decode":{"io_id":0}},{"resample_2d":{"w":2,"h":2}},{"encode":{"io_id":1,"preset":{"libpng":{"depth":null,"matte":null,"zlib_compression":null}}}}]}}

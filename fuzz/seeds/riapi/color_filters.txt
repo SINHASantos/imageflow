@@ -1,0 +1,1 @@
+s.grayscale=true&s.sepia=true&s.contrast=0.5

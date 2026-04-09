@@ -1,0 +1,1 @@
+{"framewise":{"steps":[{"decode":{"io_id":0}},{"crop":{"x1":0,"y1":0,"x2":2,"y2":2}},{"encode":{"io_id":1,"preset":{"libpng":{"depth":null,"matte":null,"zlib_compression":null}}}}]}}

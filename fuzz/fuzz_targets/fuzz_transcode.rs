@@ -1,21 +1,13 @@
 //! Fuzz target: decode arbitrary bytes + re-encode in a random format.
 //!
-//! Structured fuzzing varies the output format (JPEG/PNG/WebP/GIF) and
-//! quality. Tests the full decode → encode path through C codecs including
-//! pixel format conversion and encoder robustness with arbitrary pixels.
+//! First 2 bytes are control (format selector, quality), rest is image data.
+//! This avoids the Arbitrary overhead so the fuzzer can mutate image bytes
+//! directly — much better coverage than the structured approach.
 #![no_main]
 
-use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use imageflow_core::Context;
 use imageflow_types as s;
-
-#[derive(Debug, Arbitrary)]
-struct TranscodeInput {
-    format: u8,
-    quality: u8,
-    data: Vec<u8>,
-}
 
 fn limits() -> s::ExecutionSecurity {
     let mut sec = s::ExecutionSecurity::sane_defaults();
@@ -26,19 +18,19 @@ fn limits() -> s::ExecutionSecurity {
     sec
 }
 
-fuzz_target!(|input: TranscodeInput| {
-    if input.data.len() < 8 {
+fuzz_target!(|data: &[u8]| {
+    if data.len() < 10 {
         return;
     }
 
-    let Ok(mut ctx) = Context::create_can_panic() else { return; };
-    ctx.configure_security(limits());
-    if ctx.add_copied_input_buffer(0, &input.data).is_err() { return; }
-    if ctx.add_output_buffer(1).is_err() { return; }
+    // First 2 bytes are control, rest is image data.
+    let format_byte = data[0];
+    let quality_byte = data[1];
+    let image_data = &data[2..];
 
-    let preset = match input.format % 4 {
+    let preset = match format_byte % 4 {
         0 => s::EncoderPreset::Mozjpeg {
-            quality: Some(input.quality.min(100)),
+            quality: Some(quality_byte.min(100)),
             progressive: Some(false),
             matte: None,
         },
@@ -48,10 +40,15 @@ fuzz_target!(|input: TranscodeInput| {
             zlib_compression: None,
         },
         2 => s::EncoderPreset::WebPLossy {
-            quality: (input.quality as f32).min(100.0),
+            quality: (quality_byte as f32).min(100.0),
         },
         _ => s::EncoderPreset::Gif,
     };
+
+    let Ok(mut ctx) = Context::create_can_panic() else { return; };
+    ctx.configure_security(limits());
+    if ctx.add_copied_input_buffer(0, image_data).is_err() { return; }
+    if ctx.add_output_buffer(1).is_err() { return; }
 
     let execute = s::Execute001 {
         framewise: s::Framewise::Steps(vec![

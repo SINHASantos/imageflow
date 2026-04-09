@@ -1,0 +1,1 @@
+webp.quality=75&webp.lossless=true

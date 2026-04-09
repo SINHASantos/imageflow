@@ -1,0 +1,1 @@
+format=jpeg&jpeg.quality=85&jpeg.progressive=true

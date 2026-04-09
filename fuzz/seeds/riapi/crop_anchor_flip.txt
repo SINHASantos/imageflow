@@ -1,0 +1,1 @@
+w=300&h=300&mode=crop&anchor=middlecenter&sflip=xy
